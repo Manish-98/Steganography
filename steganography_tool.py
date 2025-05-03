@@ -9,33 +9,68 @@ class SteganographyTool:
     def __init__(self):
         self.delimiter = b'END_OF_FILE'
     
+    def calculate_capacity(self, image_path):
+        """Calculate the maximum capacity of an image for hiding data."""
+        try:
+            img = Image.open(image_path)
+            width, height = img.size
+            n_channels = len(img.getbands())
+            
+            if n_channels not in [3, 4]:
+                raise ValueError("Unsupported image format. Please use RGB or RGBA images.")
+            
+            # Calculate max bytes (accounting for overhead)
+            n_pixels = width * height
+            total_bits = n_pixels * n_channels
+            max_bytes = total_bits // 8
+            
+            # Account for overhead (extension length, delimiter)
+            overhead = 2 + len(self.delimiter)  # 2 bytes for ext length + delimiter
+            usable_bytes = max_bytes - overhead
+            
+            return {
+                'width': width,
+                'height': height,
+                'pixels': n_pixels,
+                'channels': n_channels,
+                'total_bits': total_bits,
+                'max_bytes': max_bytes,
+                'usable_bytes': usable_bytes,
+                'format': img.format,
+                'mode': img.mode
+            }
+        except Exception as e:
+            print(f"Error calculating image capacity: {e}")
+            return None
+
     def hide_data(self, cover_image_path, secret_file_path, output_path):
         """Hide the secret file inside the image using LSB steganography."""
         try:
+            # Calculate capacity first
+            capacity = self.calculate_capacity(cover_image_path)
+            if not capacity:
+                return False
+                
             # Open the image
             img = Image.open(cover_image_path)
             width, height = img.size
+            n_channels = capacity['channels']
+            
+            # Important warning for JPEG images
+            if img.format == 'JPEG':
+                print("WARNING: JPEG is a lossy format and may corrupt the hidden data when saved.")
+                print("Consider using PNG or BMP for more reliable steganography.")
             
             # Convert image to numpy array
             array = np.array(list(img.getdata()))
-            
-            # Determine the number of channels in the image (RGB or RGBA)
-            if len(img.getbands()) == 4:  # RGBA
-                n_channels = 4
-                flatten_img = array.flatten()
-            elif len(img.getbands()) == 3:  # RGB
-                n_channels = 3
-                flatten_img = array.flatten()
-            else:
-                raise ValueError("Unsupported image format. Please use RGB or RGBA images.")
+            flatten_img = array.flatten()
                 
-            # Calculate the maximum bytes that can be encoded
-            n_pixels = width * height
-            max_bytes = n_pixels * n_channels // 8
-            
             # Read the secret file
             with open(secret_file_path, 'rb') as f:
                 secret_data = f.read()
+            
+            # Get file size information
+            secret_file_size = len(secret_data)
             
             # Add the file extension to the secret data for extraction later
             file_ext = os.path.splitext(secret_file_path)[1].encode()
@@ -46,11 +81,26 @@ class SteganographyTool:
             data_to_hide = ext_len_bytes + file_ext + secret_data + self.delimiter
             
             # Check if the file to hide is too large
-            if len(data_to_hide) > max_bytes:
-                raise ValueError(f"File too large to hide. Max size: {max_bytes} bytes")
+            if len(data_to_hide) > capacity['max_bytes']:
+                print("\nERROR: File too large for this image")
+                print(f"File size to hide: {len(data_to_hide)} bytes")
+                print(f"Image capacity: {capacity['max_bytes']} bytes")
+                print(f"Difference: {len(data_to_hide) - capacity['max_bytes']} bytes too large\n")
+                print("Options:")
+                print("1. Use a larger image")
+                print("2. Compress your data before hiding it")
+                print("3. Split your data across multiple images")
+                return False
             
             # Convert data to binary
             binary_data = ''.join(format(byte, '08b') for byte in data_to_hide)
+            
+            # Display progress information
+            total_bits = len(binary_data)
+            total_capacity_bits = capacity['total_bits']
+            print(f"Image dimensions: {width}x{height} ({capacity['pixels']} pixels)")
+            print(f"Image format: {img.format}, Mode: {img.mode}")
+            print(f"Using {total_bits} of {total_capacity_bits} available bits ({(total_bits/total_capacity_bits)*100:.2f}% of capacity)")
             
             # Replace LSB of each byte in the image with our data bits
             data_index = 0
@@ -64,18 +114,23 @@ class SteganographyTool:
             
             # Reshape the array to original shape
             if n_channels == 4:
-                array = flatten_img.reshape(n_pixels, 4)
+                array = flatten_img.reshape(capacity['pixels'], 4)
             else:
-                array = flatten_img.reshape(n_pixels, 3)
+                array = flatten_img.reshape(capacity['pixels'], 3)
             
             # Convert back to image
             result = Image.fromarray(array.reshape(height, width, n_channels).astype(np.uint8))
             
-            # Save the new image
+            # Save the new image - ensure we're using a lossless format for the output
+            output_ext = os.path.splitext(output_path)[1].lower()
+            if output_ext == '.jpg' or output_ext == '.jpeg':
+                print("Warning: Converting output to PNG to prevent data loss")
+                output_path = os.path.splitext(output_path)[0] + '.png'
+            
             result.save(output_path)
             
-            print(f"Data hidden successfully in {output_path}")
-            print(f"Hidden data size: {len(data_to_hide)} bytes")
+            print(f"\nData hidden successfully in {output_path}")
+            print(f"Hidden data size: {len(data_to_hide)} bytes ({secret_file_size} bytes of actual file data)")
             
             return True
         
@@ -170,6 +225,10 @@ def main():
     extract_parser.add_argument('-i', '--image', required=True, help='Stego image path')
     extract_parser.add_argument('-o', '--output', default='output', help='Output folder for extracted file')
     
+    # Analyze command
+    analyze_parser = subparsers.add_parser('analyze', help='Analyze an image capacity')
+    analyze_parser.add_argument('-i', '--image', required=True, help='Image to analyze')
+    
     args = parser.parse_args()
     
     steg = SteganographyTool()
@@ -178,6 +237,18 @@ def main():
         steg.hide_data(args.image, args.file, args.output)
     elif args.command == 'extract':
         steg.extract_data(args.image, args.output)
+    elif args.command == 'analyze':
+        capacity = steg.calculate_capacity(args.image)
+        if capacity:
+            print("\nImage Capacity Analysis:")
+            print(f"Dimensions: {capacity['width']}x{capacity['height']} ({capacity['pixels']} pixels)")
+            print(f"Format: {capacity['format']}, Mode: {capacity['mode']} ({capacity['channels']} channels)")
+            print(f"Maximum data capacity: {capacity['max_bytes']} bytes ({capacity['max_bytes']/1024:.2f} KB)")
+            print(f"Usable data capacity: {capacity['usable_bytes']} bytes ({capacity['usable_bytes']/1024:.2f} KB)")
+            
+            if capacity['format'] == 'JPEG':
+                print("\nWARNING: JPEG is a lossy format and may corrupt the hidden data.")
+                print("For steganography, PNG or BMP formats are recommended.")
     else:
         parser.print_help()
 
