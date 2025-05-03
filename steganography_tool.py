@@ -143,25 +143,37 @@ class SteganographyTool:
         try:
             # Open the stego image
             img = Image.open(stego_image_path)
+            width, height = img.size
+            
+            print(f"Opening stego image: {stego_image_path}")
+            print(f"Image dimensions: {width}x{height}")
+            print(f"Image mode: {img.mode}")
             
             # Convert image to numpy array
             array = np.array(list(img.getdata()))
             
             # Determine the number of channels in the image
-            if len(img.getbands()) == 4:  # RGBA
-                n_channels = 4
-                flatten_img = array.flatten()
-            elif len(img.getbands()) == 3:  # RGB
-                n_channels = 3
-                flatten_img = array.flatten()
-            else:
+            n_channels = len(img.getbands())
+            print(f"Number of channels: {n_channels}")
+            
+            if n_channels not in [3, 4]:
                 raise ValueError("Unsupported image format. Please use RGB or RGBA images.")
             
+            flatten_img = array.flatten()
+            print(f"Total pixels to process: {len(array)}")
+            print(f"Total values to extract from: {len(flatten_img)}")
+            
             # Extract LSB from each byte to reconstruct the hidden data
+            print("Extracting bits from image...")
             extracted_bits = ""
             for i in range(len(flatten_img)):
                 extracted_bits += str(flatten_img[i] & 1)
+                
+                # Print progress periodically
+                if i % 1000000 == 0 and i > 0:
+                    print(f"Processed {i:,}/{len(flatten_img):,} values ({i/len(flatten_img)*100:.2f}%)")
             
+            print("Converting bits to bytes...")
             # Convert bits to bytes
             extracted_bytes = bytearray()
             for i in range(0, len(extracted_bits), 8):
@@ -169,22 +181,48 @@ class SteganographyTool:
                     byte = int(extracted_bits[i:i+8], 2)
                     extracted_bytes.append(byte)
             
+            print(f"Total extracted bytes: {len(extracted_bytes)}")
+            
+            # Debug: Check if the delimiter exists in the extracted data
+            delimiter_exists = self.delimiter in extracted_bytes
+            print(f"Delimiter exists in data: {delimiter_exists}")
+            if delimiter_exists:
+                first_occurrence = extracted_bytes.find(self.delimiter)
+                print(f"First occurrence of delimiter at byte: {first_occurrence}")
+            
             # First 2 bytes represent the extension length
+            if len(extracted_bytes) < 2:
+                raise ValueError("Extracted data is too short, doesn't even contain extension length.")
+                
             ext_len = struct.unpack('>H', extracted_bytes[:2])[0]
+            print(f"Extension length: {ext_len} bytes")
+            
+            if ext_len > 10:  # Reasonable upper limit for an extension
+                print("WARNING: Extension length seems unusually large. Possible data corruption.")
             
             # Extract the file extension
-            file_ext = extracted_bytes[2:2+ext_len].decode()
+            if len(extracted_bytes) < 2 + ext_len:
+                raise ValueError(f"Extracted data is too short to contain the full extension.")
+                
+            file_ext = extracted_bytes[2:2+ext_len].decode('utf-8', errors='replace')
+            print(f"Detected file extension: {file_ext}")
             
             # Extract the data after the extension
             data_start = 2 + ext_len
             
             # Find the delimiter in the extracted data
             delimiter_pos = extracted_bytes.find(self.delimiter, data_start)
-            if delimiter_pos == -1:
-                raise ValueError("Could not find the delimiter. The file might be corrupted.")
             
-            # Extract the actual file data
-            file_data = extracted_bytes[data_start:delimiter_pos]
+            if delimiter_pos == -1:
+                print("WARNING: Could not find the delimiter. The file might be corrupted or incomplete.")
+                print("Trying to process all available data...")
+                file_data = extracted_bytes[data_start:]
+            else:
+                print(f"Found delimiter at position {delimiter_pos}")
+                # Extract the actual file data
+                file_data = extracted_bytes[data_start:delimiter_pos]
+            
+            print(f"Extracted file data size: {len(file_data)} bytes")
             
             # Create the output folder if it doesn't exist
             os.makedirs(output_folder, exist_ok=True)
@@ -204,10 +242,22 @@ class SteganographyTool:
             print(f"Data extracted successfully to {output_file}")
             print(f"Extracted data size: {len(file_data)} bytes")
             
+            # Debug: Check the beginning of the file data
+            try:
+                preview_size = min(100, len(file_data))
+                if file_ext.lower() in ['.txt', '.py', '.java', '.js', '.html', '.css', '.json', '.xml', '.md']:
+                    print("\nPreview of extracted data:")
+                    print(file_data[:preview_size].decode('utf-8', errors='replace'))
+                    print("..." if len(file_data) > preview_size else "")
+            except:
+                pass
+            
             return output_file
         
         except Exception as e:
             print(f"Error extracting data: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
 def main():
