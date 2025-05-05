@@ -1,0 +1,9 @@
+.DS_Store
+
+extracted_files
+env
+
+*.png
+test*
+
+jpg_to_png_converter.py
