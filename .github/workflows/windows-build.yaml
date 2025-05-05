@@ -52,7 +52,13 @@ jobs:
         run: |
           pyinstaller --onefile steganography_extract.py
 
-      - name: Create zip file containing both executables
+      - name: Create zip file containing both executables (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          Compress-Archive -Path dist\steganography_hide.exe, dist\steganography_extract.exe -DestinationPath dist\steganography_executables_windows.zip
+
+      - name: Create zip file containing both executables (macOS)
+        if: matrix.platform != 'windows'
         run: |
           zip -r dist/steganography_executables_${{ matrix.platform }}.zip dist/steganography_hide dist/steganography_extract
 
