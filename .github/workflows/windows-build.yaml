@@ -7,34 +7,36 @@ on:
 
 jobs:
   build:
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
           - os: macos-latest
             platform: mac-m1
+            runner: macos-latest
             target-arch: arm64
-            runner: ubuntu-latest
-
+          - os: macos-latest
+            platform: mac-intel
+            runner: self-hosted  # uses your local Intel Mac
+            target-arch: x86_64
           - os: windows-latest
             platform: windows
-            target-arch: x86_64
             runner: windows-latest
-
-          - os: self-hosted
-            platform: mac-intel
             target-arch: x86_64
-            runner: self-hosted  # This assumes your self-hosted Intel runner is labeled as 'self-hosted'
-
-    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Set up Python
+        if: matrix.platform != 'mac-intel'
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: 3.11
+
+      - name: Verify Python version (mac-intel)
+        if: matrix.platform == 'mac-intel'
+        run: python3 --version
 
       - name: Install dependencies
         run: |
@@ -42,12 +44,13 @@ jobs:
           pip install pyinstaller
           pip install pillow
 
-      - name: Build Executable
+      - name: Build executable
         run: |
           pyinstaller --onefile steganography_tool.py
 
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: steganography-${{ matrix.platform }}
+          name: ${{ matrix.platform }}-executable
           path: dist/steganography_tool
+
