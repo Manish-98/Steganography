@@ -6,9 +6,10 @@ on:
       platform:
         description: 'Select platform to generate executable for'
         required: true
-        default: 'macos'
+        default: 'mac-intel'
         options:
-          - macos
+          - mac-intel
+          - mac-m1
           - windows
 
 jobs:
@@ -19,7 +20,9 @@ jobs:
         os: [macos-latest, windows-latest]
         include:
           - os: macos-latest
-            platform: macos
+            platform: mac-intel
+          - os: macos-latest
+            platform: mac-m1
           - os: windows-latest
             platform: windows
 
@@ -38,18 +41,23 @@ jobs:
         pip install pyinstaller
         pip install pillow
 
-    - name: Build macOS executable (Universal)
-      if: ${{ matrix.platform == 'macos' }}
+    - name: Build macOS Intel executable
+      if: ${{ github.event.inputs.platform == 'mac-intel' }}
       run: |
-        pyinstaller --onefile --target-arch=x86_64 --target-arch=arm64 steganography_tool.py
+        pyinstaller --onefile --target-arch=x86_64 steganography_tool.py
+
+    - name: Build macOS M1 executable
+      if: ${{ github.event.inputs.platform == 'mac-m1' }}
+      run: |
+        pyinstaller --onefile --target-arch=arm64 steganography_tool.py
 
     - name: Build Windows executable
-      if: ${{ matrix.platform == 'windows' }}
+      if: ${{ github.event.inputs.platform == 'windows' }}
       run: |
-        pyinstaller --onefile --platform=win32 steganography_tool.py
+        pyinstaller --onefile steganography_tool.py
 
     - name: Upload executable as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: steganography-tool-${{ matrix.platform }}
+        name: steganography-tool-${{ github.event.inputs.platform }}
         path: dist/steganography_tool
