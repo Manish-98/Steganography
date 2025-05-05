@@ -1,76 +1,54 @@
-name: Build Steganography Tool
+name: Build Executables
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
         include:
           - os: macos-latest
             platform: mac-intel
             target-arch: x86_64
+
           - os: macos-latest
             platform: mac-m1
             target-arch: arm64
+
           - os: windows-latest
             platform: windows
             target-arch: x86_64
 
-    runs-on: ${{ matrix.os }}
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.13'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install pillow
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
 
-    - name: Build macOS Intel (x86_64) executable
-      if: ${{ matrix.platform == 'mac-intel' }}
-      run: |
-        arch -x86_64 pyinstaller --onefile steganography_tool.py
+      - name: Build executable for ${{ matrix.platform }}
+        run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            arch -${{ matrix.target-arch }} pyinstaller --onefile steganography_tool.py
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            pyinstaller --onefile steganography_tool.py
+          fi
+        shell: bash
 
-    - name: Build macOS M1 (arm64) executable
-      if: ${{ matrix.platform == 'mac-m1' }}
-      run: |
-        arch -arm64 pyinstaller --onefile steganography_tool.py
-
-    - name: Build Windows executable
-      if: ${{ matrix.platform == 'windows' }}
-      run: |
-        pyinstaller --onefile steganography_tool.py
-
-    - name: Upload macOS Intel (x86_64) executable
-      if: ${{ matrix.platform == 'mac-intel' }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: steganography-tool-mac-intel
-        path: dist/steganography_tool
-
-    - name: Upload macOS M1 (arm64) executable
-      if: ${{ matrix.platform == 'mac-m1' }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: steganography-tool-mac-m1
-        path: dist/steganography_tool
-
-    - name: Upload Windows executable
-      if: ${{ matrix.platform == 'windows' }}
-      uses: actions/upload-artifact@v4
-      with:
-        name: steganography-tool-windows
-        path: dist/steganography_tool.exe
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: steganography-${{ matrix.platform }}
+          path: dist/steganography_tool*
