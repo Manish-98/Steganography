@@ -25,7 +25,23 @@ def extract(image_path, output_folder):
     image = Image.open(image_path).convert("RGB")
     pixels = list(image.getdata())
     
-    flat_bits = ''.join(_get_lsb_bits(pixel) for pixel in pixels)
+    flat_bits = ''
+    total_pixels = len(pixels)
+    last_progress = -1  # Track the last progress percentage for extraction
+    
+    # Track progress while extracting bits from the image pixels
+    for idx, pixel in enumerate(pixels):
+        flat_bits += _get_lsb_bits(pixel)
+        
+        # Calculate the progress percentage for extraction
+        percent = (idx + 1) / total_pixels * 100
+        percent = int(percent // 5 * 5)  # Round to nearest multiple of 5
+        
+        # Print progress only if the percentage has moved by 5%
+        if percent > last_progress:
+            _print_progress(idx + 1, total_pixels, "Extracting hidden data", percent)
+            last_progress = percent
+    
     size, ext_size = _parse_sizes(flat_bits)
     
     ext = _bits_to_bytes(flat_bits[64:64 + (ext_size * 8)]).decode('utf-8')
@@ -33,9 +49,13 @@ def extract(image_path, output_folder):
     
     os.makedirs(output_folder, exist_ok=True)
     output_path = os.path.join(output_folder, f"extracted_file.{ext}")
+    
+    # Write the extracted file without a progress bar
     with open(output_path, "wb") as f:
         f.write(file_data)
 
+    # Finalize extraction progress to 100% once the extraction is complete
+    _print_progress(total_pixels, total_pixels, "Extracting hidden data", 100)
 
 # Utility functions
 
@@ -65,15 +85,26 @@ def _embed_data_in_image(image, data):
     
     new_pixels = []
     bit_index = 0
+    last_progress = -1  # Track the last progress percentage
     
-    for pixel in pixels:
+    for idx, pixel in enumerate(pixels):
         new_pixel = []
         for channel in pixel[:3]:  # R, G, B
             if bit_index < len(flat_data_bits):
                 channel = (channel & ~1) | int(flat_data_bits[bit_index])
                 bit_index += 1
             new_pixel.append(channel)
+        
         new_pixels.append(tuple(new_pixel + list(pixel[3:])))  # Handle alpha if exists
+        
+        # Calculate the progress percentage
+        percent = (idx + 1) / len(pixels) * 100
+        percent = int(percent // 5 * 5)  # Round to nearest multiple of 5
+        
+        # Print progress only if the percentage has moved by 5%
+        if percent > last_progress:
+            _print_progress(idx + 1, len(pixels), "Embedding data in image", percent)
+            last_progress = percent
     
     image.putdata(new_pixels)
     return image
@@ -89,6 +120,11 @@ def _parse_sizes(bits):
 def _bits_to_bytes(bits):
     return bytes(int(bits[i:i + 8], 2) for i in range(0, len(bits), 8))
 
+def _print_progress(current, total, task_name, percent):
+    bar_length = 50
+    block = int(round(bar_length * percent / 100))
+    progress = f"\r{task_name}: [{'#' * block}{'-' * (bar_length - block)}] {percent:.2f}%"
+    print(progress, end='')
 
 # Main method for command-line execution
 
