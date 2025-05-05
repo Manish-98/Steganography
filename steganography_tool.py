@@ -154,4 +154,46 @@ def main():
         print("Invalid command. Use --help for usage information.")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) > 1:
+        main()
+    else:
+        # Launch GUI if no CLI arguments are provided
+        import tkinter as tk
+        from tkinter import filedialog, messagebox
+
+        def run_hide():
+            file = filedialog.askopenfilename(title="Select File to Hide")
+            image = filedialog.askopenfilename(title="Select Cover Image")
+            output = filedialog.asksaveasfilename(title="Save Output Image As", defaultextension=".png")
+
+            if not file or not image or not output:
+                return
+
+            try:
+                hide(file, image, output)
+                messagebox.showinfo("Success", "File successfully hidden in image!")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+        def run_extract():
+            image = filedialog.askopenfilename(title="Select Image with Hidden File")
+            output_folder = filedialog.askdirectory(title="Select Folder to Save Extracted File")
+
+            if not image or not output_folder:
+                return
+
+            try:
+                extract(image, output_folder)
+                messagebox.showinfo("Success", "File successfully extracted!")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+        root = tk.Tk()
+        root.title("Steganography Tool")
+
+        tk.Button(root, text="Hide File in Image", width=30, command=run_hide).pack(pady=10)
+        tk.Button(root, text="Extract File from Image", width=30, command=run_extract).pack(pady=10)
+
+        root.mainloop()
+
