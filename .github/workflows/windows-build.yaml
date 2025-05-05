@@ -44,13 +44,20 @@ jobs:
           pip install pyinstaller
           pip install pillow
 
-      - name: Build executable
+      - name: Build executable for steganography_hide.py
         run: |
-          pyinstaller --onefile steganography_tool.py
+          pyinstaller --onefile steganography_hide.py
 
-      - name: Upload artifact
+      - name: Build executable for steganography_extract.py
+        run: |
+          pyinstaller --onefile steganography_extract.py
+
+      - name: Create zip file containing both executables
+        run: |
+          zip -r dist/steganography_executables_${{ matrix.platform }}.zip dist/steganography_hide dist/steganography_extract
+
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform }}-executable
-          path: dist/steganography_tool
-
+          name: ${{ matrix.platform }}-executables
+          path: dist/steganography_executables_${{ matrix.platform }}.zip
