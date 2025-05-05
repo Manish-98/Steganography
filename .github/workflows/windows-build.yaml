@@ -1,33 +1,31 @@
 name: Build Steganography Tool
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      platform:
-        description: 'Select platform to generate executable for'
-        required: true
-        default: 'mac-intel'
-        options:
-          - mac-intel
-          - mac-m1
-          - windows
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
         include:
           - os: macos-latest
             platform: mac-intel
+            target-arch: x86_64
           - os: macos-latest
             platform: mac-m1
+            target-arch: arm64
           - os: windows-latest
             platform: windows
+            target-arch: x86_64
+
+    runs-on: ${{ matrix.os }}
 
     steps:
-    - name: Check out the repository
+    - name: Checkout code
       uses: actions/checkout@v3
 
     - name: Set up Python
@@ -41,23 +39,38 @@ jobs:
         pip install pyinstaller
         pip install pillow
 
-    - name: Build macOS Intel executable
-      if: ${{ github.event.inputs.platform == 'mac-intel' }}
+    - name: Build macOS Intel (x86_64) executable
+      if: ${{ matrix.platform == 'mac-intel' }}
       run: |
-        pyinstaller --onefile --target-arch=x86_64 steganography_tool.py
+        arch -x86_64 pyinstaller --onefile steganography_tool.py
 
-    - name: Build macOS M1 executable
-      if: ${{ github.event.inputs.platform == 'mac-m1' }}
+    - name: Build macOS M1 (arm64) executable
+      if: ${{ matrix.platform == 'mac-m1' }}
       run: |
-        pyinstaller --onefile --target-arch=arm64 steganography_tool.py
+        arch -arm64 pyinstaller --onefile steganography_tool.py
 
     - name: Build Windows executable
-      if: ${{ github.event.inputs.platform == 'windows' }}
+      if: ${{ matrix.platform == 'windows' }}
       run: |
         pyinstaller --onefile steganography_tool.py
 
-    - name: Upload executable as artifact
+    - name: Upload macOS Intel (x86_64) executable
+      if: ${{ matrix.platform == 'mac-intel' }}
       uses: actions/upload-artifact@v4
       with:
-        name: steganography-tool-${{ github.event.inputs.platform }}
+        name: steganography-tool-mac-intel
         path: dist/steganography_tool
+
+    - name: Upload macOS M1 (arm64) executable
+      if: ${{ matrix.platform == 'mac-m1' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: steganography-tool-mac-m1
+        path: dist/steganography_tool
+
+    - name: Upload Windows executable
+      if: ${{ matrix.platform == 'windows' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: steganography-tool-windows
+        path: dist/steganography_tool.exe
